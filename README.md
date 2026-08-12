@@ -24,6 +24,10 @@ accumulation** so Ctrl+Y yanks the whole combined region at once.
     whitespace run preceding it (so `foo  bar|` → `foo|`, not `foo  |`).
 - **Consecutive kills accumulate** into a single kill-ring entry, so
   `Ctrl+W Ctrl+W Ctrl+W` followed by `Ctrl+Y` yanks everything back at once.
+  Consecutive detection uses a `zle-line-pre-redraw` hook instead of
+  `$LASTWIDGET`, so it works correctly alongside **zsh-autosuggestions**
+  (whose async suggestion fetching otherwise corrupts `$LASTWIDGET` and breaks
+  accumulation).
 - **`yank-pop`** (usually `Meta-y` after `Ctrl+Y`) cycles through older
   kill-ring entries as usual.
 
@@ -32,7 +36,7 @@ accumulation** so Ctrl+Y yanks the whole combined region at once.
 ### Oh My Zsh
 
 ```zsh
-git clone <your-repo-url> ~/.oh-my-zsh/custom/plugins/zsh-wordnav
+git clone https://github.com/foursmonth/zsh-wordnav ~/.oh-my-zsh/custom/plugins/zsh-wordnav
 ```
 
 Then add `zsh-wordnav` to your plugins list in `~/.zshrc`:
@@ -45,10 +49,10 @@ plugins=(git z extract zsh-wordnav)
 
 ```zsh
 # zinit
-zinit light <your-github-user>/zsh-wordnav
+zinit light foursmonth/zsh-wordnav
 
 # zplug
-zplug "<your-github-user>/zsh-wordnav"
+zplug "foursmonth/zsh-wordnav"
 ```
 
 ### Manual
@@ -142,16 +146,45 @@ are dropped when the ring overflows.
 _ZSH_WORDNAV_KILLRING_MAX=64
 ```
 
+### `_ZSH_WORDNAV_AUTOSUGGEST_FIXUP`
+
+Default: `1` (enabled). When `1`, zsh-wordnav fixes an interaction with
+[zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) where
+`Ctrl+Y` (yank) leaves a stale ghost suggestion on screen.
+
+By default zsh-autosuggestions lists `yank` and `yank-pop` in
+`ZSH_AUTOSUGGEST_IGNORE_WIDGETS`, so after `Ctrl+Y` the suggestion is never
+refreshed. The result is a confusing display like `ls -a /etc| /etc` — the
+second `/etc` is the stale suggestion left over from before the yank, not the
+fresh suggestion for the new buffer.
+
+When this flag is on, zsh-wordnav removes `yank`/`yank-pop` from the ignore
+list on the first `precmd` after both plugins have loaded, then re-binds so
+`yank` becomes a normal buffer-modifying widget that fetches a fresh
+suggestion matching the restored buffer. The fixup is load-order tolerant and
+self-unloads after running once.
+
+Set to `0` to disable (e.g. if you prefer zsh-autosuggestions's default
+yank-ignored behavior):
+
+```zsh
+_ZSH_WORDNAV_AUTOSUGGEST_FIXUP=0
+```
+
 ## Tests
 
 ```zsh
 zsh test/run_tests.zsh
 ```
 
-82 non-interactive tests covering word classification, all motion widgets,
-all kill widgets, consecutive-kill accumulation, mixed forward/backward kills,
-kill-ring rotation, and no-op-kill regression (a no-op kill widget must not
-cause the next real kill to wrongly accumulate).
+147 non-interactive tests covering word classification, all motion widgets,
+all kill widgets, consecutive-kill accumulation (including under simulated
+zsh-autosuggestions async suggestion fetching), mixed forward/backward kills,
+kill-ring rotation, no-op-kill regression (a no-op kill widget must not cause
+the next real kill to wrongly accumulate), the zsh-autosuggestions
+yank-suggestion fixup, and the `zle-line-pre-redraw` consecutive-kill tracker
+classification (kill widgets, internal/plugin widgets, and user-facing widgets
+all handled correctly).
 
 ## License
 

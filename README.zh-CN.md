@@ -14,7 +14,7 @@ Zsh 智能单词导航与删除插件。
 - **Ctrl+W** —— bash 风格的空白分隔 backward kill，但更聪明：
   - 光标前是空格：只删除那段空格。
   - 光标前是非空格：先删除连续非空格，*再* 删除其前的连续空格（`foo  bar|` → `foo|`，而不是 `foo  |`）。
-- **连续裁剪累积** —— 连续按 kill widget（中间没有别的操作）会合并成 kill ring 里的**单条**记录，所以 `Ctrl+W Ctrl+W Ctrl+W` 后一次 `Ctrl+Y` 能把整段一起 yank 回来。
+- **连续裁剪累积** —— 连续按 kill widget（中间没有别的操作）会合并成 kill ring 里的**单条**记录，所以 `Ctrl+W Ctrl+W Ctrl+W` 后一次 `Ctrl+Y` 能把整段一起 yank 回来。连续检测用的是 `zle-line-pre-redraw` 钩子而非 `$LASTWIDGET`，因此在 **zsh-autosuggestions** 异步拉取建议时也能正确累积（异步建议会把 `$LASTWIDGET` 改成 `autosuggest-suggest`，破坏传统的 `$LASTWIDGET` 检测）。
 - **`yank-pop`**（通常是 `Meta+Y`，在 `Ctrl+Y` 之后）照常轮换更早的 kill ring 条目。
 
 ## 安装
@@ -22,7 +22,7 @@ Zsh 智能单词导航与删除插件。
 ### Oh My Zsh
 
 ```zsh
-git clone <你的仓库地址> ~/.oh-my-zsh/custom/plugins/zsh-wordnav
+git clone https://github.com/foursmonth/zsh-wordnav ~/.oh-my-zsh/custom/plugins/zsh-wordnav
 ```
 
 然后在 `~/.zshrc` 的 plugins 列表里加上 `zsh-wordnav`：
@@ -35,10 +35,10 @@ plugins=(git z extract zsh-wordnav)
 
 ```zsh
 # zinit
-zinit light <你的 GitHub 用户名>/zsh-wordnav
+zinit light foursmonth/zsh-wordnav
 
 # zplug
-zplug "<你的 GitHub 用户名>/zsh-wordnav"
+zplug "foursmonth/zsh-wordnav"
 ```
 
 ### 手动安装
@@ -121,13 +121,35 @@ WORDCHARS='-_'   # word 包含连字符和下划线
 _ZSH_WORDNAV_KILLRING_MAX=64
 ```
 
+### `_ZSH_WORDNAV_AUTOSUGGEST_FIXUP`
+
+默认：`1`（启用）。为 `1` 时，zsh-wordnav 会修复与
+[zsh-autosuggestions](https://github.com/zsh-users/zsh-autosuggestions) 的一个
+交互问题：`Ctrl+Y`（yank）撤销删除后，过期的灰色历史建议不会被刷新。
+
+zsh-autosuggestions 默认把 `yank` 和 `yank-pop` 列在
+`ZSH_AUTOSUGGEST_IGNORE_WIDGETS` 里，导致 `Ctrl+Y` 之后建议永远不会刷新。表现
+就是你看到的 `ls -a /etc| /etc` —— 光标后面那个 `/etc` 是 yank 之前残留的旧
+建议，并不是基于当前 buffer 的新建议。
+
+启用本修复后，zsh-wordnav 会在两个插件都加载完后的第一个 `precmd` 上，把
+`yank` / `yank-pop` 从忽略列表里移除并重新绑定，让 `yank` 变成一个普通的
+buffer 修改 widget，从而基于恢复后的 buffer 重新拉取建议。该修复对插件加载
+顺序不敏感，执行一次后自动从 precmd 钩子中卸载。
+
+如需关闭（保留 zsh-autosuggestions 默认的 yank 忽略行为）：
+
+```zsh
+_ZSH_WORDNAV_AUTOSUGGEST_FIXUP=0
+```
+
 ## 测试
 
 ```zsh
 zsh test/run_tests.zsh
 ```
 
-共 82 个非交互式测试，覆盖：word 字符分类、所有移动 widgets、所有删除 widgets、连续裁剪累积、混合向前 / 向后删除顺序、kill ring 轮转，以及**空操作 kill 不会污染下一次 kill** 的回归测试。
+共 147 个非交互式测试，覆盖：word 字符分类、所有移动 widgets、所有删除 widgets、连续裁剪累积（含模拟 zsh-autosuggestions 异步拉取建议的场景）、混合向前 / 向后删除顺序、kill ring 轮转，**空操作 kill 不会污染下一次 kill** 的回归测试，zsh-autosuggestions 的 yank 建议刷新修复，以及 `zle-line-pre-redraw` 连续 kill 追踪钩子的分类逻辑（kill widgets、插件内部 widgets、用户操作 widgets 都正确处理）。
 
 ## 许可证
 
