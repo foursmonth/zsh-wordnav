@@ -1,0 +1,8 @@
+# Editor / OS noise
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Test artifacts (none currently, reserved for future)
+*.out
