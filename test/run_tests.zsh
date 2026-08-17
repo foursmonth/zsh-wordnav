@@ -189,12 +189,27 @@ ok "non-space end: eats trailing token + preceding spaces (buffer)" "$BUFFER" "f
 ok "non-space end: cursor" "$CURSOR" "3"
 ok "non-space end: cutbuffer" "$CUTBUFFER" "  bar"
 
-# Cursor after space: delete only the space run.
+# Cursor after space: delete the space run AND the preceding word.
 reset_state; BUFFER="foo  bar  "; CURSOR=10
 _zsh_wordnav_unix_word_rubout
-ok "space end: eats only trailing spaces (buffer)" "$BUFFER" "foo  bar"
-ok "space end: cursor" "$CURSOR" "8"
-ok "space end: cutbuffer" "$CUTBUFFER" "  "
+ok "space end: eats trailing spaces + preceding word (buffer)" "$BUFFER" "foo  "
+ok "space end: cursor" "$CURSOR" "5"
+ok "space end: cutbuffer" "$CUTBUFFER" "bar  "
+
+# Cursor mid-word (non-whitespace to the right): delete only the word,
+# leaving the preceding spaces intact.
+reset_state; BUFFER="foo  barbaz"; CURSOR=8   # cursor between "bar" and "baz"
+_zsh_wordnav_unix_word_rubout
+ok "mid-word: deletes only the word (buffer)" "$BUFFER" "foo  baz"
+ok "mid-word: cursor" "$CURSOR" "5"
+ok "mid-word: cutbuffer" "$CUTBUFFER" "bar"
+
+# Same, but at the very start (no preceding whitespace to protect).
+reset_state; BUFFER="foobar"; CURSOR=3   # cursor between "foo" and "bar"
+_zsh_wordnav_unix_word_rubout
+ok "mid-word at start: deletes only the word (buffer)" "$BUFFER" "bar"
+ok "mid-word at start: cursor" "$CURSOR" "0"
+ok "mid-word at start: cutbuffer" "$CUTBUFFER" "foo"
 
 # Cursor after non-space with NO preceding space.
 reset_state; BUFFER="foobar"; CURSOR=6

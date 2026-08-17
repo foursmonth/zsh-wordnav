@@ -7,8 +7,12 @@
 #   - Ctrl+Left / Ctrl+Right / Ctrl+Backspace / Ctrl+Delete skip or delete one
 #     contiguous run of EITHER word characters OR non-word characters
 #     (vi-style "strict" word motion).
-#   - Ctrl+W deletes a whitespace-delimited token backward, including the
-#     trailing whitespace run (smarter than bash's unix-word-rubout).
+#   - Ctrl+W deletes a whitespace-delimited token backward. When the cursor
+#     follows whitespace it deletes the whitespace run plus the preceding
+#     word; when it follows a word it deletes the word plus the preceding
+#     whitespace run, unless the cursor is mid-word (non-whitespace to its
+#     right), in which case only the word is deleted. (Smarter than bash's
+#     unix-word-rubout.)
 #   - All deleted text is pushed to the kill ring, and consecutive kills
 #     accumulate into a single CUTBUFFER entry so Ctrl+Y yanks the whole
 #     combined region in one shot.
@@ -217,15 +221,18 @@ _zsh_wordnav_backward_kill_word() {
 
 # Ctrl+W — unix-word-rubout. Whitespace-delimited backward kill.
 #
-# Behavior:
-#   - If the char before the cursor is whitespace: delete only that contiguous
-#     whitespace run. (e.g. "foo  |" -> "foo|")
-#   - If it is non-whitespace: delete the contiguous non-whitespace run, and
-#     then also delete the contiguous whitespace run preceding it.
-#     (e.g. "foo  bar|" -> "foo|")
-#
-# This is bash's unix-word-rubout made smarter: bash leaves trailing
-# whitespace behind, this plugin eats it too.
+# Behavior (two branches, chosen by what sits just before the cursor):
+#   - If the char before the cursor is whitespace: delete the contiguous
+#     whitespace run AND then the contiguous non-whitespace run preceding it.
+#     (consecutive whitespace + consecutive non-whitespace)
+#     e.g. "foo  |bar" -> "|bar"  (eats the spaces AND "foo")
+#   - If the char before the cursor is non-whitespace: delete the contiguous
+#     non-whitespace run, then the contiguous whitespace run preceding it —
+#     UNLESS the char to the right of the cursor (at the original cursor
+#     position) is non-whitespace, in which case the whitespace is left
+#     alone (deleting from the middle of a word must not merge the two words).
+#     e.g. "foo  bar|"   -> "foo|"      (right side is EOL: eats spaces too)
+#          "foo  bar|baz"-> "foo  baz"  (right side is non-space: keeps spaces)
 _zsh_wordnav_unix_word_rubout() {
     emulate -L zsh
     local buf=$BUFFER cur=$CURSOR
@@ -235,19 +242,26 @@ _zsh_wordnav_unix_word_rubout() {
     fi
     local end=$cur start=$cur
     if [[ ${buf:$((cur-1)):1} == [[:space:]] ]]; then
-        # Cursor follows whitespace: delete only the whitespace run.
+        # Cursor follows whitespace: eat the whitespace run, then the
+        # non-whitespace run before it.
         while (( start > 0 )) && [[ ${buf:$((start-1)):1} == [[:space:]] ]]; do
             (( start-- ))
         done
-    else
-        # First: the non-whitespace run.
         while (( start > 0 )) && [[ ${buf:$((start-1)):1} != [[:space:]] ]]; do
             (( start-- ))
         done
-        # Then: the whitespace run preceding it.
-        while (( start > 0 )) && [[ ${buf:$((start-1)):1} == [[:space:]] ]]; do
+    else
+        # Cursor follows non-whitespace: eat the non-whitespace run first.
+        while (( start > 0 )) && [[ ${buf:$((start-1)):1} != [[:space:]] ]]; do
             (( start-- ))
         done
+        # Then eat the whitespace run preceding it, unless the right side at
+        # the original cursor position is non-whitespace (mid-word deletion).
+        if (( cur >= ${#buf} )) || [[ ${buf:$cur:1} == [[:space:]] ]]; then
+            while (( start > 0 )) && [[ ${buf:$((start-1)):1} == [[:space:]] ]]; do
+                (( start-- ))
+            done
+        fi
     fi
     local deleted=${buf:$start:$((end-start))}
     _zsh_wordnav_kill_add "$deleted" prepend
